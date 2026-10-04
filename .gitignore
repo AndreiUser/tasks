@@ -1,0 +1,6 @@
+# personal data never goes in this public repo
+tasks.json
+*.json.bak
+*.json.tmp
+config.json
+__pycache__/

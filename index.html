@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Andrei's Task Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: one narrow column of stacked sections, sticky save bar at the bottom */
+:root{
+  --bg:#f3f4f7; --surface:#ffffff; --fg:#1b2130; --muted:#5f6778; --line:#dde1ea;
+  --accent:#2f5d8a; --accent-fg:#ffffff; --accent-soft:#e3ecf6;
+  --urgent:#c2412d; --soon:#c47a12; --later:#3c8a55; --backlog:#6b5fb0; --done:#8a91a0;
+  --drop:#cfdcf0; --event:#2f5d8a;
+  --f-display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --f-body:"Instrument Sans",ui-sans-serif,system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12151c; --surface:#1b2029; --fg:#e6e9f0; --muted:#98a0b1; --line:#2c3340;
+  --accent:#7fa9d6; --accent-fg:#0f1520; --accent-soft:#223246;
+  --urgent:#ef7a66; --soon:#e5a948; --later:#6cc28a; --backlog:#a79bea; --done:#7a8292;
+  --drop:#2a3b52; --event:#7fa9d6; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12151c; --surface:#1b2029; --fg:#e6e9f0; --muted:#98a0b1; --line:#2c3340;
+  --accent:#7fa9d6; --accent-fg:#0f1520; --accent-soft:#223246;
+  --urgent:#ef7a66; --soon:#e5a948; --later:#6cc28a; --backlog:#a79bea; --done:#7a8292;
+  --drop:#2a3b52; --event:#7fa9d6; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.45 var(--f-body);margin:0}
+.wrap{max-width:720px;margin:0 auto;padding-inline:16px;padding-block:24px 110px;display:flex;flex-direction:column;gap:20px}
+header h1{font:700 1.9rem/1.1 var(--f-display);margin:0;letter-spacing:-.01em}
+header p{margin:6px 0 0;color:var(--muted);font-size:.9rem}
+.status{font:500 .75rem var(--f-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+section.sec{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.sec-head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--c)}
+.sec-head h2{font:600 1rem var(--f-display);margin:0;flex:1}
+.count{font:500 .75rem var(--f-mono);color:var(--muted)}
+ul{list-style:none;margin:0;padding:4px 0;min-height:44px}
+ul.over{background:var(--drop)}
+.empty{padding:10px 14px;color:var(--muted);font-size:.85rem;font-style:italic}
+li.task{display:grid;grid-template-columns:auto auto 1fr auto;align-items:center;gap:10px;padding:8px 10px 8px 12px;border-top:1px solid transparent}
+li.task + li.task{border-top-color:var(--line)}
+li.task.dragging{opacity:.4}
+li.task.drop-before{box-shadow:inset 0 3px 0 var(--accent)}
+.grip{cursor:grab;color:var(--muted);font:600 1rem var(--f-mono);user-select:none;padding:2px}
+.txt{min-width:0}
+.txt .t{overflow-wrap:anywhere}
+.txt .due{font:500 .72rem var(--f-mono);color:var(--muted);margin-top:2px}
+.sec[data-s="done"] .t{text-decoration:line-through;color:var(--muted)}
+input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);margin:0}
+.ctrls{display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.ib{border:1px solid var(--line);background:transparent;color:var(--fg);border-radius:6px;width:30px;height:30px;font:600 .85rem var(--f-mono);cursor:pointer;display:grid;place-items:center}
+.ib:hover{background:var(--accent-soft)}
+.ib:disabled{opacity:.3;cursor:default;background:transparent}
+select{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:6px;height:30px;font:500 .8rem var(--f-body);padding:0 4px}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.add{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--line)}
+.add input{flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:6px;padding:6px 10px;font:inherit}
+.add button{border:1px solid var(--line);background:transparent;color:var(--fg);border-radius:6px;padding:0 12px;font:600 .85rem var(--f-body);cursor:pointer}
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px))}
+.bar-in{max-width:720px;margin:0 auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.bar .msg{flex:1;min-width:0;font-size:.88rem;color:var(--muted)}
+.bar .msg.dirty{color:var(--soon);font-weight:600}
+.btn{border-radius:8px;padding:9px 18px;font:600 .9rem var(--f-body);cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--fg)}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.btn:disabled{opacity:.4;cursor:default}
+.top{display:grid;grid-template-columns:minmax(0,260px) minmax(0,1fr);gap:16px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-width:0}
+.panel h3{font:600 1rem var(--f-display);margin:0 0 8px;display:flex;align-items:center;gap:8px}
+.panel h3 .grow{flex:1}
+.kw{white-space:nowrap;font:500 .7rem var(--f-mono);color:var(--muted);letter-spacing:.04em}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center;font-variant-numeric:tabular-nums}
+.cal .wd{font:500 .68rem var(--f-mono);color:var(--muted);padding:2px 0 4px}
+.cal button{position:relative;border:0;background:transparent;color:var(--fg);font:500 .82rem var(--f-body);aspect-ratio:1;border-radius:6px;cursor:pointer;padding:0;max-width:100%}
+.cal button.out{color:var(--muted);opacity:.45}
+.cal button:hover{background:var(--accent-soft)}
+.cal button.today{outline:1.5px solid var(--accent);outline-offset:-1.5px;font-weight:700}
+.cal button.sel{background:var(--accent);color:var(--accent-fg)}
+.cal button .pip{position:absolute;left:50%;bottom:3px;transform:translateX(-50%);width:5px;height:5px;border-radius:50%;background:var(--pc)}
+.nav{border:1px solid var(--line);background:transparent;color:var(--fg);border-radius:6px;width:26px;height:26px;cursor:pointer;font:600 .8rem var(--f-mono)}
+.up-list{list-style:none;margin:0;padding:0;min-height:0}
+.up-list li{display:grid;grid-template-columns:4.6rem 1fr;gap:10px;padding:6px 0;border-top:1px solid var(--line);align-items:baseline}
+.up-list li:first-child{border-top:0}
+.up-list .when{font:500 .74rem var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.up-list .when.late{color:var(--urgent);font-weight:600}
+.up-list .when.now{color:var(--accent);font-weight:600}
+.up-list .what{min-width:0;overflow-wrap:anywhere}
+.up-list .what i.ev{border-radius:2px;background:var(--event)}
+.up-list .what .loc{color:var(--muted);font-size:.8rem}
+.up-list .when small{display:block;font-weight:500;color:var(--muted)}
+.legend{display:flex;gap:12px;margin-top:8px;font-size:.75rem;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend i{width:7px;height:7px;border-radius:50%;background:var(--urgent)}
+.legend i.ev{border-radius:2px;background:var(--event)}
+.cal button .pip.ev{border-radius:1px;background:var(--event)}
+.cal button .pips{position:absolute;left:0;right:0;bottom:3px;display:flex;justify-content:center;gap:2px}
+.cal button .pips .pip{position:static;transform:none}
+.up-list .what i{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--c);margin-right:6px}
+.hint{color:var(--muted);font-size:.85rem;margin:4px 0 0}
+.linkbtn{border:0;background:none;color:var(--accent);font:600 .8rem var(--f-body);cursor:pointer;padding:0}
+input[type=date]{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:6px;height:30px;font:500 .78rem var(--f-mono);padding:0 4px;width:8.6rem;max-width:100%}
+@media (max-width:620px){.top{grid-template-columns:1fr}.top .panel:first-child{max-width:340px;width:100%}}
+@media (max-width:480px){li.task{grid-template-columns:auto 1fr;}.grip{display:none}.ctrls{grid-column:1/-1;justify-content:flex-end}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Task Board</h1>
+    <p>Drag tasks (or use ↑ ↓ and the menu) to reorder and move them, then press Save. Changes you make in the terminal appear here automatically.</p>
+  </header>
+  <div class="status" id="status">Connecting…</div>
+  <div class="top">
+    <div class="panel">
+      <h3><span class="grow" id="cal-title">Calendar</span><button class="nav" id="prev" aria-label="Previous month">‹</button><button class="nav" id="next" aria-label="Next month">›</button></h3>
+      <div class="cal" id="cal"></div>
+      <div class="legend"><span><i></i>Task</span><span><i class="ev"></i>Calendar event</span></div>
+    </div>
+    <div class="panel">
+      <h3><span class="grow" id="up-title">Upcoming</span><button class="linkbtn" id="clear" hidden>Show all</button></h3>
+      <ul class="up-list" id="upcoming"></ul>
+      <p class="hint" id="gcal-status">Loading calendar…</p>
+    </div>
+  </div>
+  <div id="board"></div>
+</div>
+<div class="bar"><div class="bar-in">
+  <span class="msg" id="msg">No changes</span>
+  <button class="btn" id="discard" disabled>Discard</button>
+  <button class="btn primary" id="save" disabled>Save</button>
+</div></div>
+
+<script>
+const SECTIONS=[
+  {id:"urgent",name:"Urgent",c:"var(--urgent)"},
+  {id:"soon",name:"Soon",c:"var(--soon)"},
+  {id:"later",name:"Later",c:"var(--later)"},
+  {id:"backlog",name:"Backlog",c:"var(--backlog)"},
+  {id:"done",name:"Done",c:"var(--done)"}
+];
+const prevSec=new Map();
+const iso=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+const fromIso=s=>{const [y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d)};
+const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const secColor=id=>(SECTIONS.find(s=>s.id===id)||SECTIONS[2]).c;
+let view=(()=>{const n=new Date();return new Date(n.getFullYear(),n.getMonth(),1)})(), selDay=null;
+function isoWeek(d){const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const n=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-n);const y=new Date(Date.UTC(t.getUTCFullYear(),0,1));return Math.ceil(((t-y)/864e5+1)/7)}
+function renderTop(){
+  const today=iso(new Date());
+  const open=items.filter(i=>i.date&&i.section!=="done");
+  // calendar
+  $("#cal-title").innerHTML="";const tt=document.createElement("span");tt.textContent=MONTHS[view.getMonth()]+" "+view.getFullYear()+" ";
+  const kw=document.createElement("span");kw.className="kw";kw.textContent="KW "+isoWeek(new Date())+" now";
+  $("#cal-title").append(tt,kw);
+  const cal=$("#cal");cal.innerHTML="";
+  ["Mo","Tu","We","Th","Fr","Sa","Su"].forEach(w=>{const e=document.createElement("div");e.className="wd";e.textContent=w;cal.appendChild(e)});
+  const start=new Date(view);start.setDate(1-((view.getDay()+6)%7));
+  for(let k=0;k<42;k++){
+    const d=new Date(start);d.setDate(start.getDate()+k);const s=iso(d);
+    if(k>=35&&d.getMonth()!==view.getMonth())break;
+    const b=document.createElement("button");b.textContent=d.getDate();
+    if(d.getMonth()!==view.getMonth())b.classList.add("out");
+    if(s===today)b.classList.add("today");if(s===selDay)b.classList.add("sel");
+    const on=open.filter(i=>i.date===s), ev=events.filter(e=>e.date===s);
+    b.setAttribute("aria-label",d.getDate()+" "+MONTHS[d.getMonth()]+(on.length?", "+on.length+" task"+(on.length>1?"s":""):"")+(ev.length?", "+ev.length+" event"+(ev.length>1?"s":""):""));
+    if(on.length||ev.length){const ps=document.createElement("span");ps.className="pips";
+      if(on.length){const p=document.createElement("span");p.className="pip";const top=SECTIONS.find(x=>on.some(i=>i.section===x.id));p.style.setProperty("--pc",top?top.c:"var(--accent)");ps.appendChild(p)}
+      if(ev.length){const p=document.createElement("span");p.className="pip ev";ps.appendChild(p)}
+      b.appendChild(ps)}
+    b.onclick=()=>{selDay=selDay===s?null:s;renderTop()};
+    cal.appendChild(b);
+  }
+  // upcoming: dated tasks + calendar events, merged
+  const ul=$("#upcoming");ul.innerHTML="";
+  let list=open.map(i=>({kind:"task",date:i.date,time:"",text:i.text,section:i.section})).concat(events.map(e=>({kind:"event",...e})))
+    .sort((a,b)=>(a.date+(a.time||"00:00")).localeCompare(b.date+(b.time||"00:00")));
+  if(selDay){list=list.filter(i=>i.date===selDay);const d=fromIso(selDay);$("#up-title").textContent=d.getDate()+" "+MONTHS[d.getMonth()]}
+  else $("#up-title").textContent="Next two weeks";
+  $("#clear").hidden=!selDay;
+  if(!list.length){const li=document.createElement("li");li.style.display="block";li.className="hint";
+    li.textContent=selDay?"Nothing on this day.":"Nothing dated yet. Give a task a date with the date field on its row.";ul.appendChild(li)}
+  const tMs=fromIso(today).getTime();
+  list.forEach(it=>{
+    const li=document.createElement("li");const w=document.createElement("span");w.className="when";
+    const diff=Math.round((fromIso(it.date)-tMs)/864e5);const d=fromIso(it.date);
+    w.textContent=diff<0?(-diff)+"d late":diff===0?"Today":diff===1?"Tomorrow":d.getDate()+" "+MON[d.getMonth()];
+    if(diff<0)w.classList.add("late");else if(diff<=1)w.classList.add("now");
+    if(it.time){const sm=document.createElement("small");sm.textContent=it.time;w.appendChild(sm)}
+    const t=document.createElement("span");t.className="what";
+    const dot=document.createElement("i");
+    if(it.kind==="event")dot.className="ev";else t.style.setProperty("--c",secColor(it.section));
+    t.appendChild(dot);t.appendChild(document.createTextNode(it.text));
+    if(it.loc){const l=document.createElement("span");l.className="loc";l.textContent=" · "+it.loc;t.appendChild(l)}
+    li.append(w,t);ul.appendChild(li)});
+}
+// ---- Calendar: the local server reads your calendar's ICS link (next 14 days) ----
+let events=[];
+async function loadEvents(){
+  const st=$("#gcal-status");
+  try{
+    const r=await fetch("/api/events",{cache:"no-store"});const d=await r.json();
+    if(!d.configured){events=[];st.textContent="No calendar linked. In a terminal run: tasks config ics \"<your secret iCal address>\""}
+    else if(d.error){st.textContent=(events.length?"Couldn't refresh the calendar; showing the last events loaded. ":"Couldn't load the calendar: ")+d.error}
+    else{events=d.events||[];st.textContent="Calendar events shown as squares · updated "+new Date(d.fetchedAt).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}
+  }catch(e){st.textContent="The task server isn't running. Start it with: tasks web"}
+  renderTop();
+}
+let items=[], saved="[]", version=null, online=false, dirty=false, dragId=null;
+const $=s=>document.querySelector(s);
+
+function setDirty(){dirty=JSON.stringify(items)!==saved;
+  const m=$("#msg");m.textContent=dirty?"Unsaved changes":"No changes";m.classList.toggle("dirty",dirty);
+  $("#save").disabled=!dirty||!online;$("#discard").disabled=!dirty}
+function uid(){return "t"+Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+function bySec(s){return items.filter(i=>i.section===s)}
+function moveWithin(id,dir){const it=items.find(i=>i.id===id);const list=bySec(it.section);const k=list.indexOf(it);const other=list[k+dir];if(!other)return;
+  const a=items.indexOf(it),b=items.indexOf(other);[items[a],items[b]]=[items[b],items[a]];render()}
+function moveTo(id,sec,beforeId){const k=items.findIndex(i=>i.id===id);const [it]=items.splice(k,1);it.section=sec;
+  if(sec==="done"&&!it.doneOn)it.doneOn=new Date().toISOString().slice(0,10);
+  if(sec!=="done")delete it.doneOn;
+  if(beforeId){const b=items.findIndex(i=>i.id===beforeId);items.splice(b,0,it)}
+  else{let last=-1;items.forEach((x,i)=>{if(x.section===sec)last=i});items.splice(last+1,0,it)}
+  render()}
+
+function render(){
+  const board=$("#board");board.innerHTML="";
+  board.style.cssText="display:flex;flex-direction:column;gap:16px";
+  for(const s of SECTIONS){
+    const list=bySec(s.id);
+    const sec=document.createElement("section");sec.className="sec";sec.dataset.s=s.id;sec.style.setProperty("--c",s.c);
+    sec.innerHTML=`<div class="sec-head"><span class="dot"></span><h2></h2><span class="count"></span></div><ul></ul>`;
+    sec.querySelector("h2").textContent=s.name;sec.querySelector(".count").textContent=list.length;
+    const ul=sec.querySelector("ul");
+    if(!list.length){const e=document.createElement("li");e.className="empty";e.textContent=s.id==="backlog"?"Nothing in the backlog.":"Drop tasks here";ul.appendChild(e)}
+    list.forEach((it,k)=>{
+      const li=document.createElement("li");li.className="task";li.draggable=true;li.dataset.id=it.id;
+      li.innerHTML=`<span class="grip" aria-hidden="true">⋮⋮</span><input type="checkbox" id="c-${it.id}" aria-label="Mark done"><div class="txt"><div class="t"></div></div><div class="ctrls"><button class="ib up" aria-label="Move up">↑</button><button class="ib dn" aria-label="Move down">↓</button><input type="date" id="d-${it.id}" aria-label="Due date"><select id="s-${it.id}" aria-label="Move to section"></select><button class="ib rm" aria-label="Remove task">×</button></div>`;
+      li.querySelector(".t").textContent=it.text;
+      if(it.due||it.doneOn){const d=document.createElement("div");d.className="due";d.textContent=it.doneOn?"done "+it.doneOn:it.due;li.querySelector(".txt").appendChild(d)}
+      const di=li.querySelector("input[type=date]");di.value=it.date||"";
+      di.onchange=()=>{if(di.value)it.date=di.value;else delete it.date;render()};
+      const cb=li.querySelector("input");cb.checked=it.section==="done";
+      cb.onchange=()=>{if(cb.checked)prevSec.set(it.id,it.section);moveTo(it.id,cb.checked?"done":(prevSec.get(it.id)||"later"))};
+      li.querySelector(".up").disabled=k===0;li.querySelector(".dn").disabled=k===list.length-1;
+      li.querySelector(".up").onclick=()=>moveWithin(it.id,-1);
+      li.querySelector(".dn").onclick=()=>moveWithin(it.id,1);
+      const sel=li.querySelector("select");
+      SECTIONS.forEach(o=>{const op=document.createElement("option");op.value=o.id;op.textContent=o.name;if(o.id===s.id)op.selected=true;sel.appendChild(op)});
+      sel.onchange=()=>moveTo(it.id,sel.value);
+      const rm=li.querySelector(".rm");
+      rm.onclick=()=>{if(rm.dataset.armed){items=items.filter(i=>i.id!==it.id);render()}else{rm.dataset.armed=1;rm.textContent="?";rm.setAttribute("aria-label","Click again to remove");setTimeout(()=>{if(rm.isConnected){delete rm.dataset.armed;rm.textContent="×"}},2500)}};
+      li.addEventListener("dragstart",e=>{dragId=it.id;li.classList.add("dragging");e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain",it.id)});
+      li.addEventListener("dragend",()=>{dragId=null;li.classList.remove("dragging");document.querySelectorAll(".drop-before,.over").forEach(x=>x.classList.remove("drop-before","over"))});
+      li.addEventListener("dragover",e=>{if(!dragId)return;e.preventDefault();document.querySelectorAll(".drop-before").forEach(x=>x.classList.remove("drop-before"));li.classList.add("drop-before")});
+      li.addEventListener("drop",e=>{e.preventDefault();e.stopPropagation();if(dragId&&dragId!==it.id)moveTo(dragId,s.id,it.id)});
+      ul.appendChild(li);
+    });
+    ul.addEventListener("dragover",e=>{if(!dragId)return;e.preventDefault();ul.classList.add("over")});
+    ul.addEventListener("dragleave",e=>{if(!ul.contains(e.relatedTarget))ul.classList.remove("over")});
+    ul.addEventListener("drop",e=>{e.preventDefault();ul.classList.remove("over");if(dragId)moveTo(dragId,s.id)});
+    if(s.id!=="done"){
+      const f=document.createElement("form");f.className="add";
+      f.innerHTML=`<input id="add-${s.id}" placeholder="Add a task to ${s.name}" aria-label="New task"><button type="submit">Add</button>`;
+      f.onsubmit=e=>{e.preventDefault();const v=f.querySelector("input").value.trim();if(!v)return;moveTo((items.push({id:uid(),text:v,section:s.id}),items[items.length-1].id),s.id)};
+      sec.appendChild(f);
+    }
+    board.appendChild(sec);
+  }
+  renderTop();
+  setDirty();
+}
+
+$("#prev").onclick=()=>{view=new Date(view.getFullYear(),view.getMonth()-1,1);renderTop()};
+$("#next").onclick=()=>{view=new Date(view.getFullYear(),view.getMonth()+1,1);renderTop()};
+$("#clear").onclick=()=>{selDay=null;renderTop()};
+$("#discard").onclick=()=>{items=JSON.parse(saved);render()};
+async function putTasks(){
+  const clean=items.map(r=>({...r}));
+  const r=await fetch("/api/tasks",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:clean,baseVersion:version})});
+  const d=await r.json();
+  if(r.status===409){version=d.version;saved=JSON.stringify(d.items);setDirty();
+    $("#msg").textContent="Changed in the terminal since you started editing. Save again to overwrite it, or Discard to load the terminal's version.";return}
+  if(!r.ok)throw new Error(d.error||r.status);
+  version=d.version;saved=JSON.stringify(clean);items=JSON.parse(saved);render();$("#msg").textContent="Saved to tasks.json";
+  showStatus(d.updated);
+}
+$("#save").onclick=async()=>{
+  if(!online)return;const b=$("#save");b.disabled=true;$("#msg").textContent="Saving…";
+  try{await putTasks()}catch(e){$("#msg").textContent="Couldn't save: "+e.message+". Is the task server still running?";b.disabled=false}
+};
+window.addEventListener("beforeunload",e=>{if(dirty){e.preventDefault();e.returnValue=""}});
+function showStatus(updated){$("#status").textContent="Synced with "+(window.TASKS_FILE||"tasks.json")+(updated?" · last change "+new Date(updated).toLocaleString([], {dateStyle:"medium",timeStyle:"short"}):"")}
+
+// Poll the shared file: changes made in the terminal show up here within a few seconds.
+async function pull(){
+  try{
+    const r=await fetch("/api/tasks",{cache:"no-store"});const d=await r.json();
+    online=true;window.TASKS_FILE=d.file;
+    if(d.version!==version){
+      const incoming=JSON.stringify(d.items||[]);version=d.version;
+      if(!dirty){saved=incoming;items=JSON.parse(incoming);render()}
+      else if(incoming!==saved){saved=incoming;setDirty();$("#msg").textContent="Changed in the terminal. Save to keep your version, or Discard to load the terminal's."}
+    }
+    showStatus(d.updated);setDirty();
+  }catch(e){online=false;setDirty();$("#status").textContent="The task server isn't running. Start it with: tasks web"}
+}
+render();$("#status").textContent="Loading your tasks…";
+pull();setInterval(pull,3000);
+loadEvents();setInterval(loadEvents,300000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden){pull();loadEvents()}});
+</script>
+</body>
+</html>
